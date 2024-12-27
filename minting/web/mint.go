@@ -223,12 +223,7 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	}, nil, nil
 }
 
-func newMintHandler(l1RPC string, mintContract common.Address) http.Handler {
-	// TODO: handle clean shutdown
-	client, err := ethclient.Dial(l1RPC)
-	if err != nil {
-		log.Crit("error dialing L1 rpc endpoint", "error", err)
-	}
+func newMintHandler(client *ethclient.Client, mintContract common.Address) http.Handler {
 	chainID, err := client.ChainID(context.Background())
 	if err != nil {
 		log.Crit("error getting chain ID", "error", err)

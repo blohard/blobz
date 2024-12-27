@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -44,7 +45,12 @@ func GetWebHandler(webFolderPath, l1RPCEndpoint string, mintContract common.Addr
 
 	mux.Handle(STATIC_FILE_HANDLER_PREFIX, staticFileHandler)
 
-	mux.Handle(JSON_HANDLER_PREFIX+"mint", newMintHandler(l1RPCEndpoint, mintContract))
+	// TODO: handle clean shutdown of the ethclient
+	client, err := ethclient.Dial(l1RPCEndpoint)
+	if err != nil {
+		log.Crit("error dialing L1 rpc endpoint", "error", err)
+	}
+	mux.Handle(JSON_HANDLER_PREFIX+"mint", newMintHandler(client, mintContract))
 
 	return mux
 }
