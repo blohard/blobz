@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/holiman/uint256"
 
@@ -23,7 +25,7 @@ import (
 type mintRequest struct {
 	PKey    string `json:"pkey"`    // hex encoded
 	Address string `json:"address"` // hex encoded destination address for the minted tokens on Base
-	Blob    []byte `json:"blob"`    // base64 encoded data to put in the blob, can be empty
+	Blob    string `json:"blob"`    // data to put in the blob, can be empty
 }
 
 type mintResponse struct {
@@ -47,6 +49,7 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 		log.Warn("request address was not a hex address")
 		return &Error{Code: 102}, nil, nil
 	}
+	req.PKey = strings.TrimSpace(req.PKey)
 	if len(req.PKey) == 0 {
 		log.Warn("no pkey set")
 		return &Error{Code: 103}, nil, nil
@@ -87,12 +90,18 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	priorityFee, maxFee, blobFeeCap := minting.MaxFeesFromBaseFees(h.BaseFee, *h.ExcessBlobGas)
 	log.Info("fees", "priorityFee", priorityFee, "maxFee", maxFee, "baseFee", h.BaseFee, "blobFeeCap", blobFeeCap)
 
+	if !utf8.ValidString(req.Blob) {
+		log.Warn("invalid utf-8 in blob string")
+		return &Error{Code: 115}, nil, nil
+	}
+	req.Blob = strings.TrimSpace(req.Blob)
 	if len(req.Blob) == 0 {
 		log.Info("No blob data provided, using default blob text.")
-		defaultBlobText := "I just minted $BLOBZ with proof-of-blob! Learn more at https://blobz.wtf"
-		req.Blob = []byte(defaultBlobText)
+		req.Blob = "I just minted $BLOBZ with proof-of-blob! Learn more at https://blobz.wtf"
+	} else {
+		req.Blob = "Proof-of-blob submitted through https://mint.blobz.wtf. User message: " + req.Blob
 	}
-	log.Info("blob text", "text", string(req.Blob))
+	log.Info("blob text", "text", req.Blob)
 
 	var blob kzg4844.Blob
 
@@ -100,21 +109,23 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	woffset := 0
 	roffset := 0
 
+	userBlob := []byte(req.Blob)
+	// TODO: this breaks UTF-8 if a rune is larger than 1 byte and we insert a 0 between it
 	write32 := func() {
 		// put a 0 in the first byte to make sure we always have a valid field element
 		b[woffset] = 0
 		woffset++
 		wend := woffset + 31
 		rend := roffset + 31
-		if rend > len(req.Blob) {
-			rend = len(req.Blob)
+		if rend > len(userBlob) {
+			rend = len(userBlob)
 		}
-		copy(b[woffset:wend], req.Blob[roffset:rend])
+		copy(b[woffset:wend], userBlob[roffset:rend])
 		woffset = wend
 		roffset = rend
 	}
 
-	for roffset < len(req.Blob) && woffset < len(b)-32 {
+	for roffset < len(userBlob) && woffset < len(b)-32 {
 		write32()
 	}
 
@@ -139,6 +150,7 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	kzgHash := kzg4844.CalcBlobHashV1(hasher, &c)
 	hashes := []common.Hash{kzgHash}
 
+	req.Address = strings.TrimSpace(req.Address)
 	destAddress := common.HexToAddress(req.Address)
 	data := []byte{0x75, 0x5E, 0xDD, 0x17} // "mintTo()"
 	for i := 0; i < 12; i++ {

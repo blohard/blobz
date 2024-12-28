@@ -51,6 +51,7 @@ func GetWebHandler(webFolderPath, l1RPCEndpoint string, mintContract common.Addr
 		log.Crit("error dialing L1 rpc endpoint", "error", err)
 	}
 	mux.Handle(JSON_HANDLER_PREFIX+"mint", newMintHandler(client, mintContract))
+	mux.Handle(JSON_HANDLER_PREFIX+"stats", newStatsHandler(client, mintContract))
 
 	return mux
 }
