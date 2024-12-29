@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/holiman/uint256"
@@ -29,8 +30,9 @@ type mintRequest struct {
 }
 
 type mintResponse struct {
-	Code int    `json:"code"`
-	TxID string `json:"txid"`
+	Code    int    `json:"code"`
+	TxID    string `json:"txid"`
+	Address string `json:"address"`
 }
 
 // type minter implements jsonHandler, handles requests of type `mintRequest`, and returns a `mintResponse`.
@@ -40,15 +42,13 @@ type minter struct {
 	chainID      *uint256.Int
 }
 
+// Next error code: 120
 func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *string, *string) {
 	req := mintRequest{}
 	if err := decode(&req, r.Body); err != nil {
 		return err, nil, nil
 	}
-	if !common.IsHexAddress(req.Address) {
-		log.Warn("request address was not a hex address")
-		return &Error{Code: 102}, nil, nil
-	}
+
 	req.PKey = strings.TrimSpace(req.PKey)
 	if len(req.PKey) == 0 {
 		log.Warn("no pkey set")
@@ -60,8 +60,18 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 		log.Warn("failed to create private key", "error", err)
 		return &Error{Code: 104}, nil, nil
 	}
+
 	signerAddress := crypto.PubkeyToAddress(key.PublicKey)
 	log.Info("Signer address", "address", signerAddress)
+	req.Address = strings.TrimSpace(req.Address)
+	destAddress := signerAddress
+	if len(req.Address) > 0 {
+		if !common.IsHexAddress(req.Address) {
+			log.Warn("request address was not a hex address")
+			return &Error{Code: 102}, nil, nil
+		}
+		destAddress = common.HexToAddress(req.Address)
+	}
 
 	ctx1, cancel1 := context.WithTimeout(context.Background(), minting.L1_CLIENT_TIMEOUT)
 	defer cancel1()
@@ -85,14 +95,17 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	if h.ExcessBlobGas == nil {
 		// this shouldn't happen
 		log.Error("excess blob gas is nil")
-		return &Error{Code: 107}, nil, nil
+		return &Error{Code: 119}, nil, nil
 	}
 	priorityFee, maxFee, blobFeeCap := minting.MaxFeesFromBaseFees(h.BaseFee, *h.ExcessBlobGas)
 	log.Info("fees", "priorityFee", priorityFee, "maxFee", maxFee, "baseFee", h.BaseFee, "blobFeeCap", blobFeeCap)
 
 	if !utf8.ValidString(req.Blob) {
 		log.Warn("invalid utf-8 in blob string")
-		return &Error{Code: 115}, nil, nil
+		return &ErrorWithMessage{
+			Code:    115,
+			Message: "blob string was not UTF-8 as expected",
+		}, nil, nil
 	}
 	req.Blob = strings.TrimSpace(req.Blob)
 	if len(req.Blob) == 0 {
@@ -150,8 +163,6 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	kzgHash := kzg4844.CalcBlobHashV1(hasher, &c)
 	hashes := []common.Hash{kzgHash}
 
-	req.Address = strings.TrimSpace(req.Address)
-	destAddress := common.HexToAddress(req.Address)
 	data := []byte{0x75, 0x5E, 0xDD, 0x17} // "mintTo()"
 	for i := 0; i < 12; i++ {
 		data = append(data, 0x00)
@@ -215,13 +226,46 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	err = m.l1Client.SendTransaction(ctx5, signedTx)
 	if err != nil {
 		log.Error("failed to send transaction", "error", err)
-		return &Error{Code: 114}, nil, nil
+		return &ErrorWithMessage{
+			Code:    114,
+			Message: "Failed to send transaction: " + err.Error(),
+		}, nil, nil
 	}
 
-	return &mintResponse{
-		Code: 1,
-		TxID: signedTx.Hash().Hex(),
-	}, nil, nil
+	// Now await receipt for up to 1 minute before giving up
+	txid := signedTx.Hash()
+	start := time.Now()
+	for time.Now().Sub(start) <= time.Minute {
+		ctx, cancel := context.WithTimeout(context.Background(), minting.L1_CLIENT_TIMEOUT)
+		defer cancel()
+		r, err := m.l1Client.TransactionReceipt(ctx, txid)
+		if err == ethereum.NotFound {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if err != nil {
+			log.Error("error waiting for receipt", "error", err)
+			return &ErrorWithMessage{
+				Code:    116,
+				Message: "Error waiting for receipt: " + err.Error(),
+			}, nil, nil
+		}
+		if r.Status != 0 {
+			log.Info("got receipt", "txid", txid.Hex())
+			return &mintResponse{
+				Code:    1,
+				TxID:    txid.Hex(),
+				Address: destAddress.Hex(),
+			}, nil, nil
+		}
+		// transaction must have reverted for unknown reasons
+		log.Error("receipt status nonzero", "txid", txid.Hex())
+		return &Error{Code: 118}, nil, nil
+	}
+
+	log.Error("timeout waiting for receipt", "txid", txid.Hex())
+	// TODO: Should we return the txid + address just in case it goes through?
+	return &Error{Code: 117}, nil, nil
 }
 
 func newMintHandler(client *ethclient.Client, mintContract common.Address) http.Handler {

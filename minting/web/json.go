@@ -61,6 +61,11 @@ type Error struct {
 	Code int
 }
 
+type ErrorWithMessage struct {
+	Code    int
+	Message string
+}
+
 // use this reader for decoding JSON from the network to protect against oversized requests
 func decodeReader(r io.Reader, n int64) io.Reader {
 	return &safeReader{r, n}
