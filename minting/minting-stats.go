@@ -107,7 +107,6 @@ func EstimateGas(client *ethclient.Client, m ethereum.CallMsg) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	// Actual gas usage can vary with the blob gas price, so to prevent random out of gas, we add a bit of a buffer.
 	return uint64(float64(gas) * 1.2), nil
 }
@@ -146,15 +145,22 @@ func (m *MintingStats) refreshLoop() {
 			errorWait()
 			continue
 		}
-		_, maxFeePerGas, blobFeeCap := MaxFeesFromBaseFees(h.BaseFee, *h.ExcessBlobGas)
+		pFee, maxFeePerGas, blobFeeCap := MaxFeesFromBaseFees(h.BaseFee, *h.ExcessBlobGas)
 		log.Info("fee caps", "maxFeePerGas", maxFeePerGas, "blobFeeCap", blobFeeCap)
 
 		// estimate gas of the tx
 		gas, err := EstimateGas(m.l1Client, ethereum.CallMsg{
-			From:       m.mintContract, // any address will do since this isn't a real tx
-			To:         &m.mintContract,
-			BlobHashes: []common.Hash{dummyHash},
-			Data:       dummyData,
+			// The sender account we use cannot be a random dummy addres: it must have enough ETH
+			// to cover the gas fee otherwise this will error out. Alternatively you can leave the
+			// gas fees unspecified, but then the estimate provided by geth is inaccurate (about 2X
+			// higher than actual -- geth bug?).
+			From:          common.HexToAddress("0xC824b5b6cE65533EFd29864403821e510344c7F5"),
+			To:            &m.mintContract,
+			GasFeeCap:     maxFeePerGas,
+			GasTipCap:     pFee,
+			BlobGasFeeCap: blobFeeCap,
+			BlobHashes:    []common.Hash{dummyHash},
+			Data:          dummyData,
 		})
 		if err != nil {
 			log.Error("failed to estimate gas", "error", err)
