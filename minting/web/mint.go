@@ -42,6 +42,12 @@ type minter struct {
 	chainID      *uint256.Int
 }
 
+type ErrorWithResponse struct {
+	Code    int    `json:"code"`
+	TxID    string `json:"txid"`
+	Address string `json:"address"`
+}
+
 // Next error code: 120
 func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *string, *string) {
 	req := mintRequest{}
@@ -267,8 +273,11 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	}
 
 	log.Error("timeout waiting for receipt", "txid", txid.Hex())
-	// TODO: Should we return the txid + address just in case it goes through?
-	return &Error{Code: 117}, nil, nil
+	return &ErrorWithResponse{
+		Code:    117,
+		TxID:    txid.Hex(),
+		Address: destAddress.Hex(),
+	}, nil, nil
 }
 
 func newMintHandler(client *ethclient.Client, mintContract common.Address) http.Handler {

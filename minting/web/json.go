@@ -58,12 +58,12 @@ func (h defaultHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type Error struct {
-	Code int
+	Code int `json:"code"`
 }
 
 type ErrorWithMessage struct {
-	Code    int
-	Message string
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 // use this reader for decoding JSON from the network to protect against oversized requests
