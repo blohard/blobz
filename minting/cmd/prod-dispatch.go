@@ -29,7 +29,7 @@ func main() {
 		L1RPCEndpoint:     "http://localhost:8545",
 		FullChainPathname: filepath.Join(*app, "data/secret/fullchain.pem"),
 		PrivKeyPathname:   filepath.Join(*app, "data/secret/privkey.pem"),
-		MintContract:      common.HexToAddress("0x998Cd2C603F2c8E52788bc7Ee9C39abFd8Abe131"),
+		MintContract:      common.HexToAddress("0x5a3322F3A365465413d7302388E55717685a926C"),
 		Dev:               false,
 	}
 	if err := SetWeblogOutput(filepath.Join(*app, "log/httplog.txt")); err != nil {

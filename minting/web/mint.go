@@ -54,6 +54,9 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 		log.Warn("no pkey set")
 		return &Error{Code: 103}, nil, nil
 	}
+	if strings.HasPrefix(req.PKey, "0x") {
+		req.PKey = req.PKey[2:]
+	}
 	var err error
 	key, err := crypto.HexToECDSA(req.PKey)
 	if err != nil {
