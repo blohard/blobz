@@ -35,12 +35,16 @@ func (m *statter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *
 		}
 		log.Warn("returning potentially stale stats")
 	}
+	congestion := int(stats.BlobBaseFee / 1e9)
+	if congestion == 0 {
+		congestion = 1
+	}
 	return &statsResponse{
 		Code:             1,
 		Time:             stats.Time,
 		MintAmount:       stats.MintAmount,
 		EstimatedGasFee:  stats.EstimatedGasFee,
-		CongestionFactor: int(stats.BlobBaseFee/1e9) + 1,
+		CongestionFactor: congestion,
 	}, nil, nil
 }
 
