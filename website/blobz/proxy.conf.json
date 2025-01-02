@@ -1,0 +1,15 @@
+{
+  "/json": {
+    "target": "https://mint.blobz.wtf",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  },
+  "/static": {
+    "target": "http://localhost:4200",
+    "pathRewrite": {
+      "^/static": ""
+    },
+    "logLevel": "debug"
+  }
+}

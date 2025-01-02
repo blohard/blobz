@@ -1,0 +1,80 @@
+<div class="minting-form">
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label for="privateKey">Private Key</label>
+      <div class="input-wrapper">
+        <input type="text" id="privateKey" [(ngModel)]="privateKey" name="privateKey" placeholder="Ethereum private key"
+          required maxlength="1000">
+        <button *ngIf="privateKey" class="clear-button" type="button" (click)="privateKey = ''">✕</button>
+      </div>
+      <details class="info-text">
+        <summary>Why do you need my private key?</summary>
+        <p>Browser wallet software cannot submit blob transactions, so in order for us to submit a blob transaction on
+          your behalf, we will need the private key of an Ethereum mainnet account containing enough $ETH to cover the
+          gas fee. <br><br>
+
+          The private key is used by this service only for submitting one mainnet proof-of-blob transaction. You can
+          always use a throwaway account here that contains only the $ETH needed to cover gas fees.<br><br>
+
+          If you are uncomfortable with providing a private key here but you'd still like to mint $BLOBZ, you can
+          download this code and run your own private instance.
+        </p>
+      </details>
+    </div>
+
+    <div class="form-group">
+      <label for="mintTo">Mint To Address</label>
+      <input type="text" id="mintTo" [(ngModel)]="mintToAddress" name="mintTo"
+        placeholder="(Optional) Enter recipient address" required maxlength="1000">
+      <small class="helper-text">$BLOBZ tokens will be delivered to this address if specified, and otherwise will be
+        delivered to the address corresponding to the private key. Tokens are always delivered on <a class="info-link"
+          href="https://base.org">Base</a>.</small>
+      <details class="info-text">
+        <summary>Why does this take a few minutes?</summary>
+        <p>Once your blob transaction is accepted by the Ethereum network, a message is submitted to the Base network
+          using the standard bridge to mint the tokens. This bridging operation typically requires about 10 minutes to
+          complete.</p>
+      </details>
+    </div>
+
+    <div class="form-group">
+      <label for="message">Blob Message</label>
+      <input type="text" id="message" [(ngModel)]="blobMessage" name="message"
+        placeholder="(Optional) Enter a custom message to place in your blob" required maxlength="10000">
+      <details class="info-text">
+        <summary>What's this message used for?</summary>
+        <p>The message you provide here will be included in the blob that this service submits to the Ethereum network
+          in order to mint your tokens. Ethereum guarantees that blobs will be available for download for around 18
+          days, but some services keep them around much longer. It's just a fun way to leave your personalized imprint
+          on the network.</p>
+      </details>
+    </div>
+
+    <button type="submit">Mint BLOBZ</button>
+  </form>
+</div>
+
+<div *ngIf="showError" class="overlay">
+  <div class="overlay-content">
+    <p>{{ errorMessage }}</p>
+    <div *ngIf="showTxID">
+      <p>Check the transaction status on <a href="https://{{testnetPrefix}}etherscan.io/tx/{{ txid }}"
+          target="_blank">Etherscan</a>.</p>
+    </div>
+    <button (click)="showError = false">Close</button>
+  </div>
+</div>
+
+<div *ngIf="isLoading" class="loading-overlay">
+  <div class="spinner"></div>
+</div>
+
+<div *ngIf="showSuccess" class="overlay">
+  <div class="overlay-content">
+    <p>Transaction successfully submitted. View on <a href="https://{{testnetPrefix}}etherscan.io/tx/{{ txid }}"
+        target="_blank">Etherscan</a>.</p>
+    <p>Your tokens will be delivered to <a href="https://{{testnetPrefix}}basescan.org/address/{{ address }}#tokentxns"
+        target="_blank">{{address}}</a> on Base within about 10 minutes.</p>
+    <button (click)="showSuccess = false">Close</button>
+  </div>
+</div>

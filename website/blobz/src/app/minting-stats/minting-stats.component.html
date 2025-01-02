@@ -1,0 +1,37 @@
+<div class="stats-container">
+  <div class="stats-group">
+    <div class="stat-item">
+      <label>Mint Amount</label>
+      <div class="stat-value">{{ mintAmount }} BLOBZ</div>
+      <details class="info-text">
+        <summary>Details</summary>
+        <p>This is the number of BLOBZ tokens you can expect to receive after submitting a proof-of-blob transaction.
+          The amount decreases with time, and varies with blob congestion. The lower the congestion, the more tokens
+          you'll
+          receive.</p>
+      </details>
+    </div>
+
+    <div class="stat-item">
+      <label>Blob Congestion</label>
+      <div class="stat-value">{{ blobCongestion }}</div>
+      <details class="info-text">
+        <summary>What is blob congestion?</summary>
+        <p>This represents the demand for blob space in recent Ethereum blocks, with 1 being the lowest.
+          The lower the congestion, the more BLOBZ tokens you'll receive. For example, if congestion is 1, you'll
+          receive 10 times more tokens than when congestion is 10.</p>
+      </details>
+    </div>
+
+    <div class="stat-item">
+      <label>Estimated Gas Fee</label>
+      <div class="stat-value">{{ estimatedGasFee }} ETH</div>
+      <details class="info-text">
+        <summary>How is this calculated?</summary>
+        <p>This is the approximate amount of ETH needed to cover the gas fee for submitting a proof-of-blob transaction
+          to Ethereum mainnet. The actual fee may vary based on network conditions, and the actual amount will
+          almost always be lower than this estimate.</p>
+      </details>
+    </div>
+  </div>
+</div>
