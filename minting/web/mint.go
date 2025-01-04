@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -109,68 +110,14 @@ func (m minter) handle(r *http.Request, w http.ResponseWriter) (interface{}, *st
 	priorityFee, maxFee, blobFeeCap := minting.MaxFeesFromBaseFees(h.BaseFee, *h.ExcessBlobGas)
 	log.Info("fees", "priorityFee", priorityFee, "maxFee", maxFee, "baseFee", h.BaseFee, "blobFeeCap", blobFeeCap)
 
-	if !utf8.ValidString(req.Blob) {
-		log.Warn("invalid utf-8 in blob string")
+	sidecar, hashes, err := BlobFromString(req.Blob)
+	if err != nil {
+		log.Warn("Could not convert blob to string", "error", err)
 		return &ErrorWithMessage{
 			Code:    115,
-			Message: "blob string was not UTF-8 as expected",
+			Message: err.Error(),
 		}, nil, nil
 	}
-	req.Blob = strings.TrimSpace(req.Blob)
-	if len(req.Blob) == 0 {
-		log.Info("No blob data provided, using default blob text.")
-		req.Blob = "I just minted $BLOBZ with proof-of-blob! Learn more at https://blobz.wtf"
-	} else {
-		req.Blob = "Proof-of-blob submitted through https://mint.blobz.wtf. User message: " + req.Blob
-	}
-	log.Info("blob text", "text", req.Blob)
-
-	var blob kzg4844.Blob
-
-	b := blob[:]
-	woffset := 0
-	roffset := 0
-
-	userBlob := []byte(req.Blob)
-	// TODO: this breaks UTF-8 if a rune is larger than 1 byte and we insert a 0 between it
-	write32 := func() {
-		// put a 0 in the first byte to make sure we always have a valid field element
-		b[woffset] = 0
-		woffset++
-		wend := woffset + 31
-		rend := roffset + 31
-		if rend > len(userBlob) {
-			rend = len(userBlob)
-		}
-		copy(b[woffset:wend], userBlob[roffset:rend])
-		woffset = wend
-		roffset = rend
-	}
-
-	for roffset < len(userBlob) && woffset < len(b)-32 {
-		write32()
-	}
-
-	var c kzg4844.Commitment
-	c, err = kzg4844.BlobToCommitment(&blob)
-	if err != nil {
-		log.Error("failed to compute blob commitment", "error", err)
-		return &Error{Code: 108}, nil, nil
-	}
-	proof, err := kzg4844.ComputeBlobProof(&blob, c)
-	if err != nil {
-		log.Error("failed to compute blob proof", "error", err)
-		return &Error{Code: 109}, nil, nil
-	}
-
-	sidecar := &types.BlobTxSidecar{}
-	sidecar.Blobs = []kzg4844.Blob{blob}
-	sidecar.Commitments = []kzg4844.Commitment{c}
-	sidecar.Proofs = []kzg4844.Proof{proof}
-
-	hasher := sha256.New()
-	kzgHash := kzg4844.CalcBlobHashV1(hasher, &c)
-	hashes := []common.Hash{kzgHash}
 
 	data := []byte{0x75, 0x5E, 0xDD, 0x17} // "mintTo()"
 	for i := 0; i < 12; i++ {
@@ -292,4 +239,67 @@ func newMintHandler(client *ethclient.Client, mintContract common.Address) http.
 			chainID:      uint256.MustFromBig(chainID),
 		},
 	}
+}
+
+// BlobFromString returns a blob populated from the given string
+func BlobFromString(blobStr string) (*types.BlobTxSidecar, []common.Hash, error) {
+	if !utf8.ValidString(blobStr) {
+		return nil, nil, errors.New("invalid utf-8 in blob string")
+	}
+	blobStr = strings.TrimSpace(blobStr)
+	if len(blobStr) == 0 {
+		log.Info("No blob data provided, using default blob text.")
+		blobStr = "I just minted $BLOBZ with proof-of-blob! Learn more at https://blobz.wtf"
+	} else {
+		blobStr = "Proof-of-blob submitted through https://mint.blobz.wtf. User message: " + blobStr
+	}
+	log.Info("blob text", "text", blobStr)
+
+	var blob kzg4844.Blob
+
+	b := blob[:]
+	woffset := 0
+	roffset := 0
+
+	userBlob := []byte(blobStr)
+	// TODO: this breaks UTF-8 if a rune is larger than 1 byte and we insert a 0 between it
+	write32 := func() {
+		// put a 0 in the first byte to make sure we always have a valid field element
+		b[woffset] = 0
+		woffset++
+		wend := woffset + 31
+		rend := roffset + 31
+		if rend > len(userBlob) {
+			rend = len(userBlob)
+		}
+		copy(b[woffset:wend], userBlob[roffset:rend])
+		woffset = wend
+		roffset = rend
+	}
+
+	for roffset < len(userBlob) && woffset < len(b)-32 {
+		write32()
+	}
+
+	c, err := kzg4844.BlobToCommitment(&blob)
+	if err != nil {
+		log.Error("failed to compute blob commitment", "error", err)
+		return nil, nil, err
+	}
+	proof, err := kzg4844.ComputeBlobProof(&blob, c)
+	if err != nil {
+		log.Error("failed to compute blob proof", "error", err)
+		return nil, nil, err
+	}
+
+	sidecar := &types.BlobTxSidecar{}
+	sidecar.Blobs = []kzg4844.Blob{blob}
+	sidecar.Commitments = []kzg4844.Commitment{c}
+	sidecar.Proofs = []kzg4844.Proof{proof}
+
+	hasher := sha256.New()
+	kzgHash := kzg4844.CalcBlobHashV1(hasher, &c)
+	hashes := []common.Hash{kzgHash}
+
+	return sidecar, hashes, nil
 }
