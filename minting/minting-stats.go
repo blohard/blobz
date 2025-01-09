@@ -172,7 +172,7 @@ func (m *MintingStats) refreshLoop() {
 		// combine individual fee components into a single ETH fee value
 		totalMaxFee := new(big.Int).SetUint64(gas)
 		totalMaxFee.Mul(totalMaxFee, maxFeePerGas)
-		blobFeeCap.Mul(blobFeeCap, big.NewInt(2^17)) // gas per blob
+		blobFeeCap.Mul(blobFeeCap, big.NewInt(1<<17)) // gas per blob
 		totalMaxFee.Add(totalMaxFee, blobFeeCap)
 		fee := new(big.Float).SetInt(totalMaxFee)
 		fee.Quo(fee, big.NewFloat(params.Ether)) // convert to units of ETH
